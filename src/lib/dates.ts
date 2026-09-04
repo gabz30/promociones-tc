@@ -81,6 +81,34 @@ export function parseSpanishDateRange(
     };
   }
 
+  // All weekdays in a month: todos los jueves de agosto de 2026
+  const allWeekdays = text.match(
+    /todos los (?:lunes|martes|miercoles|jueves|viernes|sabados?|domingos?) de ([a-z]+)(?:\s+de)?\s+(\d{4})/,
+  );
+  if (allWeekdays && MONTHS[allWeekdays[1]] !== undefined) {
+    const month = MONTHS[allWeekdays[1]];
+    const year = Number(allWeekdays[2]);
+    return {
+      startDate: toIso(year, month, 1),
+      endDate: toIso(year, month, lastDayOfMonth(year, month)),
+    };
+  }
+
+  // With weekday names (Cibao): del viernes 4 al domingo 6 de septiembre de 2026
+  const weekdayRange = text.match(
+    /del\s+(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+(\d{1,2})\s+al\s+(?:lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+)?(\d{4})/,
+  );
+  if (weekdayRange) {
+    const month = MONTHS[weekdayRange[3]];
+    if (month !== undefined) {
+      const year = Number(weekdayRange[4]);
+      return {
+        startDate: toIso(year, month, Number(weekdayRange[1])),
+        endDate: toIso(year, month, Number(weekdayRange[2])),
+      };
+    }
+  }
+
   // desde el 16 al 24 de julio de 2026
   const desde = text.match(
     /desde el\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+)?(\d{4})/,
@@ -124,6 +152,22 @@ export function parseSpanishDateRange(
       startDate: toIso(year, month, Number(sameY[1])),
       endDate: toIso(year, month, Number(sameY[2])),
     };
+  }
+
+  // Single day: el 17 de agosto 2026 / solo el 17 de agosto de 2026
+  const singleDay = text.match(
+    /(?:solo\s+)?(?:el\s+)?(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+)?(\d{4})/,
+  );
+  if (singleDay && MONTHS[singleDay[2]] !== undefined) {
+    // Avoid matching range fragments already handled above (e.g. "31 de octubre 2026")
+    // when the string still contains "al" as a range connector.
+    if (!/\bal\s+\d{1,2}\b/.test(text)) {
+      const month = MONTHS[singleDay[2]];
+      const year = Number(singleDay[3]);
+      const day = Number(singleDay[1]);
+      const iso = toIso(year, month, day);
+      return { startDate: iso, endDate: iso };
+    }
   }
 
   // Open-ended until: hasta el 31 de julio de 2026 / hasta el 31 de julio
@@ -200,4 +244,40 @@ export function formatDisplayDate(iso: string): string {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
+}
+
+/** Compact range for cards, e.g. "4 – 6 de septiembre de 2026". */
+export function formatDisplayDateRange(startIso: string, endIso: string): string {
+  if (startIso === endIso) return formatDisplayDate(startIso);
+
+  const [sy, sm, sd] = startIso.split("-").map(Number);
+  const [ey, em, ed] = endIso.split("-").map(Number);
+  const start = new Date(Date.UTC(sy, sm - 1, sd));
+  const end = new Date(Date.UTC(ey, em - 1, ed));
+
+  if (sy === ey && sm === em) {
+    const monthYear = new Intl.DateTimeFormat("es-DO", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(end);
+    return `${sd} – ${ed} de ${monthYear}`;
+  }
+
+  if (sy === ey) {
+    const startPart = new Intl.DateTimeFormat("es-DO", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }).format(start);
+    const endPart = new Intl.DateTimeFormat("es-DO", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(end);
+    return `${startPart} – ${endPart}`;
+  }
+
+  return `${formatDisplayDate(startIso)} – ${formatDisplayDate(endIso)}`;
 }

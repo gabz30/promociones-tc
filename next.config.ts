@@ -28,6 +28,31 @@ const nextConfig: NextConfig = {
         hostname: "backend.bhd.com.do",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "do.scotiabank.com",
+        pathname: "/content/dam/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.cibao.com.do",
+        pathname: "/media/**",
+      },
+      {
+        protocol: "https",
+        hostname: "cibao.com.do",
+        pathname: "/media/**",
+      },
+      {
+        protocol: "https",
+        hostname: "bsc.com.do",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.bsc.com.do",
+        pathname: "/**",
+      },
     ],
   },
 };

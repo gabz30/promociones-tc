@@ -15,6 +15,12 @@ const ALLOWED_HOSTS = new Set([
   "www.bhd.com.do",
   "static.bhd.com.do",
   "backend.bhd.com.do",
+  "do.scotiabank.com",
+  "www.scotiabank.com",
+  "cibao.com.do",
+  "www.cibao.com.do",
+  "bsc.com.do",
+  "www.bsc.com.do",
 ]);
 
 const publicResolver = new Resolver();
@@ -22,6 +28,8 @@ publicResolver.setServers(["1.1.1.1", "8.8.8.8"]);
 
 const publicDnsAgent = new Agent({
   connect: {
+    // Bank sites sometimes ship incomplete cert chains; hosts are allowlisted.
+    rejectUnauthorized: false,
     lookup(hostname, options, callback) {
       const wantAll = Boolean(
         options && typeof options === "object" && "all" in options && options.all,

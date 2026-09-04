@@ -1,6 +1,6 @@
 export type PromoStatus = "today" | "upcoming" | "past";
 
-export type BankId = "qik" | "lafise" | "bhd";
+export type BankId = "qik" | "lafise" | "bhd" | "scotia" | "cibao" | "bsc";
 
 export interface Promotion {
   id: string;

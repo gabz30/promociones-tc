@@ -18,7 +18,7 @@ const body = Manrope({
 export const metadata: Metadata = {
   title: "PromoTC — Más tarjetas. Más beneficios.",
   description:
-    "Descubre las promociones de tus tarjetas de crédito en un solo lugar. Qik, LAFISE, BHD y más.",
+    "Descubre las promociones de tus tarjetas de crédito en un solo lugar. Qik, LAFISE, BHD, Scotiabank, Cibao, Santa Cruz y más.",
 };
 
 export default function RootLayout({

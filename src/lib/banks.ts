@@ -34,6 +34,30 @@ export const BANK_THEMES: Record<BankId, BankTheme> = {
     onColor: "#ffffff",
     slogan: "El banco como tú",
   },
+  scotia: {
+    id: "scotia",
+    name: "Scotiabank",
+    color: "#EC111A",
+    soft: "#fde8e9",
+    onColor: "#ffffff",
+    slogan: "You're richer than you think",
+  },
+  cibao: {
+    id: "cibao",
+    name: "Cibao",
+    color: "#0B3D91",
+    soft: "#e8eef8",
+    onColor: "#ffffff",
+    slogan: "Juntos lo hacemos realidad",
+  },
+  bsc: {
+    id: "bsc",
+    name: "Santa Cruz",
+    color: "#12499B",
+    soft: "#e7eef8",
+    onColor: "#ffffff",
+    slogan: "Más cerca de ti",
+  },
 };
 
 export function getBankTheme(bankId: BankId): BankTheme {
