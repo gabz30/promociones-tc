@@ -21,18 +21,14 @@ export default async function HomePage() {
 
   return (
     <>
-      <SiteHeader
-        todayCount={data.today.length}
-        upcomingCount={data.upcoming.length}
-        pastCount={data.past.length}
-      />
+      <SiteHeader />
 
       <main className="flex flex-1 flex-col">
         <PromoExplorer data={data} errors={errors} />
       </main>
 
-      <footer className="border-t border-black/5 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-8 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <footer className="border-t border-[var(--line)] bg-[var(--surface)]">
+        <div className="mx-auto flex w-full flex-col gap-2 px-4 py-8 text-sm text-[var(--muted)] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8 xl:px-10">
           <FooterSources sources={sources} />
           <p>Actualizado: {fetchedLabel}</p>
         </div>

@@ -2,6 +2,7 @@
 
 :root {
   --brand: #1e4dff;
+  --brand-text: #1e4dff;
   --brand-deep: #1539c9;
   --brand-ink: #0b1f6b;
   --yellow: #ffd23f;
@@ -10,8 +11,25 @@
   --ink: #101828;
   --muted: #667085;
   --surface: #ffffff;
+  --surface-muted: #f3f4f6;
   --background: #f4f7ff;
   --foreground: var(--ink);
+  --line: rgba(16, 24, 40, 0.08);
+  --on-light: #101828;
+  --muted-on-light: #667085;
+  color-scheme: light;
+}
+
+html.dark {
+  --brand-text: #8eabff;
+  --ink: #f2f4f7;
+  --muted: #b4bdd0;
+  --surface: #171e2e;
+  --surface-muted: #121826;
+  --background: #0b1020;
+  --foreground: var(--ink);
+  --line: rgba(255, 255, 255, 0.1);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -30,7 +48,22 @@ body {
   font-family: var(--font-body), system-ui, sans-serif;
 }
 
+html.dark body {
+  background:
+    radial-gradient(ellipse 70% 40% at 100% 0%, rgba(30, 77, 255, 0.22), transparent 55%),
+    radial-gradient(ellipse 50% 30% at 0% 20%, rgba(255, 210, 63, 0.06), transparent 50%),
+    var(--background);
+}
+
 ::selection {
   background: color-mix(in oklab, var(--yellow) 55%, white);
-  color: var(--ink);
+  color: var(--on-light);
+}
+
+.accent-text {
+  color: var(--accent);
+}
+
+html.dark .accent-text {
+  color: color-mix(in oklab, var(--accent) 62%, white);
 }

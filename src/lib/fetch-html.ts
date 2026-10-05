@@ -5,57 +5,62 @@ import { Agent, fetch as undiciFetch } from "undici";
 
 const execFileAsync = promisify(execFile);
 
-const publicResolver = new Resolver();
-publicResolver.setServers(["1.1.1.1", "8.8.8.8"]);
+const PUBLIC_DNS_SERVERS = ["1.1.1.1", "8.8.8.8"];
 
-function publicDnsLookup(
-  hostname: string,
-  options: { all?: boolean } | number | undefined,
-  callback: (...args: any[]) => void,
-) {
-  const wantAll = Boolean(
-    options && typeof options === "object" && "all" in options && options.all,
-  );
+function lookupWith(resolver: Resolver) {
+  return function publicDnsLookup(
+    hostname: string,
+    options: { all?: boolean } | number | undefined,
+    callback: (...args: any[]) => void,
+  ) {
+    const wantAll = Boolean(
+      options && typeof options === "object" && "all" in options && options.all,
+    );
 
-  publicResolver
-    .resolve4(hostname)
-    .then((addresses) => {
-      if (!addresses.length) {
-        callback(new Error(`No A records for ${hostname}`), wantAll ? [] : "", 4);
-        return;
-      }
+    resolver
+      .resolve4(hostname)
+      .then((addresses) => {
+        if (!addresses.length) {
+          callback(new Error(`No A records for ${hostname}`), wantAll ? [] : "", 4);
+          return;
+        }
 
-      if (wantAll) {
-        callback(
-          null,
-          addresses.map((address) => ({ address, family: 4 as const })),
-        );
-        return;
-      }
+        if (wantAll) {
+          callback(
+            null,
+            addresses.map((address) => ({ address, family: 4 as const })),
+          );
+          return;
+        }
 
-      callback(null, addresses[0], 4);
-    })
-    .catch((error: Error) => {
-      callback(error, wantAll ? [] : "", 4);
-    });
+        callback(null, addresses[0], 4);
+      })
+      .catch((error: Error) => {
+        callback(error, wantAll ? [] : "", 4);
+      });
+  };
+}
+
+function createResolver(server: string) {
+  const resolver = new Resolver();
+  resolver.setServers([server]);
+  return resolver;
 }
 
 /**
- * Some local DNS resolvers hijack bank domains. Resolve via public DNS
- * and keep TLS verification enabled.
+ * Some local DNS resolvers hijack bank domains. Resolve via public DNS.
+ * Akamai sometimes 403s one edge, so each server is tried on its own.
  */
-const publicDnsAgent = new Agent({
-  connect: {
-    lookup: publicDnsLookup,
-  },
-});
-
-/** Fallback when a bank site has a broken/incomplete cert chain. */
-const publicDnsInsecureAgent = new Agent({
-  connect: {
-    rejectUnauthorized: false,
-    lookup: publicDnsLookup,
-  },
+const publicDnsClients = PUBLIC_DNS_SERVERS.map((server) => {
+  const resolver = createResolver(server);
+  const lookup = lookupWith(resolver);
+  return {
+    resolver,
+    agent: new Agent({ connect: { lookup } }),
+    insecureAgent: new Agent({
+      connect: { rejectUnauthorized: false, lookup },
+    }),
+  };
 });
 
 export interface FetchRemoteOptions {
@@ -67,9 +72,10 @@ export interface FetchRemoteOptions {
 async function fetchWithCurl(
   url: string,
   options: FetchRemoteOptions = {},
+  resolver: Resolver = publicDnsClients[0].resolver,
 ): Promise<string> {
   const hostname = new URL(url).hostname;
-  const addresses = await publicResolver.resolve4(hostname);
+  const addresses = await resolver.resolve4(hostname);
   if (!addresses.length) {
     throw new Error(`No A records for ${hostname}`);
   }
@@ -129,30 +135,61 @@ async function fetchWithUndici(
   return await response.text();
 }
 
+function errorText(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    if (current instanceof Error) {
+      parts.push(current.message);
+      const code = "code" in current ? String(current.code) : "";
+      if (code) parts.push(code);
+      current = "cause" in current ? current.cause : undefined;
+      continue;
+    }
+    parts.push(String(current));
+    break;
+  }
+  return parts.join(" ");
+}
+
+function isCertificateError(error: unknown): boolean {
+  return /certificate|UNABLE_TO_VERIFY|SELF_SIGNED|unable to verify|CERT_/i.test(
+    errorText(error),
+  );
+}
+
 export async function fetchRemoteText(
   url: string,
   options: FetchRemoteOptions = {},
 ): Promise<string> {
-  try {
-    return await fetchWithUndici(url, options, publicDnsAgent);
-  } catch (primaryError) {
-    try {
-      return await fetchWithUndici(url, options, publicDnsInsecureAgent);
-    } catch {
-      // continue to curl on Windows
-    }
+  let lastError: unknown;
 
-    if (process.platform === "win32") {
+  for (const client of publicDnsClients) {
+    try {
+      return await fetchWithUndici(url, options, client.agent);
+    } catch (error) {
+      lastError = error;
+      if (!isCertificateError(error)) continue;
+
       try {
-        return await fetchWithCurl(url, options);
-      } catch {
-        // fall through to primary error
+        return await fetchWithUndici(url, options, client.insecureAgent);
+      } catch (insecureError) {
+        lastError = insecureError;
       }
     }
-    throw primaryError instanceof Error
-      ? primaryError
-      : new Error(String(primaryError));
   }
+
+  if (process.platform === "win32") {
+    for (const client of publicDnsClients) {
+      try {
+        return await fetchWithCurl(url, options, client.resolver);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /** @deprecated Use fetchRemoteText — kept for Qik callers that validate HTML. */

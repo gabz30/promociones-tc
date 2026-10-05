@@ -13,7 +13,7 @@ export function FooterSources({ sources }: { sources: PromoSource[] }) {
           <ExternalLinkButton
             href={source.url}
             title={`Promociones ${source.name}`}
-            className="font-bold text-[var(--brand)] underline-offset-4 hover:underline"
+            className="font-bold text-[var(--brand-text)] underline-offset-4 hover:underline"
           >
             {source.name}
           </ExternalLinkButton>

@@ -100,7 +100,7 @@ function ExternalViewerModal({
       onClick={onClose}
     >
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.25rem] bg-white shadow-2xl"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.25rem] bg-[var(--surface)] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="flex shrink-0 items-center gap-3 border-b border-black/8 bg-[var(--brand)] px-4 py-3 text-white sm:px-5">
@@ -127,16 +127,16 @@ function ExternalViewerModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--yellow)] text-lg font-black text-[var(--ink)] hover:brightness-95"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--yellow)] text-lg font-black text-[var(--on-light)] hover:brightness-95"
             aria-label="Cerrar"
           >
             ×
           </button>
         </header>
 
-        <div className="relative min-h-0 flex-1 bg-[#f0f3fa]">
+        <div className="relative min-h-0 flex-1 bg-[var(--background)]">
           {loading && !blocked && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#f0f3fa] text-[var(--muted)]">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[var(--background)] text-[var(--muted)]">
               <div className="size-9 animate-spin rounded-full border-4 border-[var(--brand)] border-t-transparent" />
               <p className="text-sm font-medium">Cargando contenido…</p>
             </div>
@@ -170,7 +170,7 @@ function ExternalViewerModal({
                   setBlocked(false);
                   setLoading(true);
                 }}
-                className="text-sm font-bold text-[var(--brand)] underline-offset-2 hover:underline"
+                className="text-sm font-bold text-[var(--brand-text)] underline-offset-2 hover:underline"
               >
                 Reintentar aquí
               </button>
@@ -193,13 +193,13 @@ function ExternalViewerModal({
           )}
         </div>
 
-        <footer className="shrink-0 border-t border-black/8 bg-white px-4 py-2 text-center text-xs text-[var(--muted)] sm:px-5">
+        <footer className="shrink-0 border-t border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-center text-xs text-[var(--muted)] sm:px-5">
           Vista segura dentro de PromoTC ·{" "}
           <a
             href={state.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-bold text-[var(--brand)] underline-offset-2 hover:underline"
+            className="font-bold text-[var(--brand-text)] underline-offset-2 hover:underline"
           >
             Abrir afuera
           </a>

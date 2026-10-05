@@ -1,64 +1,73 @@
 "use client";
 
+import { useState } from "react";
+import Image from "next/image";
 import { getBankTheme } from "@/lib/banks";
 import type { BankId, PromoSource } from "@/lib/types";
 
 interface BankFiltersProps {
   sources: PromoSource[];
-  active: BankId | "all";
-  onChange: (value: BankId | "all") => void;
+  selected: BankId[];
+  onToggle: (id: BankId) => void;
 }
 
-export function BankFilters({ sources, active, onChange }: BankFiltersProps) {
-  return (
-    <section id="bancos" className="scroll-mt-24" aria-labelledby="bancos-heading">
-      <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-bold tracking-[0.16em] text-[var(--brand)] uppercase">
-            Fuentes
-          </p>
-          <h2
-            id="bancos-heading"
-            className="mt-1 font-[family-name:var(--font-display)] text-2xl font-extrabold tracking-tight text-[var(--ink)] sm:text-3xl"
-          >
-            Bancos que conoces
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={() => onChange("all")}
-          className={`self-start rounded-full px-4 py-2 text-sm font-bold transition ${
-            active === "all"
-              ? "bg-[var(--ink)] text-white"
-              : "bg-white text-[var(--muted)] ring-1 ring-black/10 hover:text-[var(--ink)]"
-          }`}
-        >
-          Todos
-        </button>
-      </div>
+function BankIcon({ id }: { id: BankId }) {
+  const theme = getBankTheme(id);
+  const [failed, setFailed] = useState(false);
 
-      <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-2 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0 sm:pb-0">
-        {sources.map((source) => {
-          const theme = getBankTheme(source.id);
-          const isActive = active === source.id || active === "all";
-          return (
-            <button
-              key={source.id}
-              type="button"
-              onClick={() => onChange(active === source.id ? "all" : source.id)}
-              className={`min-w-[220px] flex-shrink-0 rounded-3xl px-5 py-5 text-left transition sm:min-w-0 ${
-                active !== "all" && !isActive ? "opacity-45 grayscale" : ""
-              } ${active === source.id ? "ring-4 ring-black/10" : ""}`}
-              style={{ background: theme.color, color: theme.onColor }}
-            >
-              <p className="font-[family-name:var(--font-display)] text-2xl font-extrabold">
-                {theme.name}
-              </p>
-              <p className="mt-1 text-sm font-medium opacity-90">{theme.slogan}</p>
-            </button>
-          );
-        })}
-      </div>
-    </section>
+  if (failed) {
+    return (
+      <span
+        className="font-[family-name:var(--font-display)] text-[0.65rem] font-extrabold"
+        style={{ color: theme.color }}
+      >
+        {theme.name.slice(0, 2)}
+      </span>
+    );
+  }
+
+  return (
+    <Image
+      src={theme.logo}
+      alt=""
+      width={72}
+      height={28}
+      className="max-h-5 max-w-[4.25rem] object-contain"
+      style={{ height: "1.15rem", width: "auto", maxWidth: "4.25rem" }}
+      unoptimized
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+export function BankFilters({ sources, selected, onToggle }: BankFiltersProps) {
+  const showingAll = selected.length === 0;
+
+  return (
+    <div className="flex flex-nowrap items-center justify-start gap-1.5 xl:flex-wrap xl:justify-center">
+      {sources.map((source) => {
+        const theme = getBankTheme(source.id);
+        const picked = selected.includes(source.id);
+        return (
+          <button
+            key={source.id}
+            type="button"
+            title={theme.name}
+            aria-label={theme.name}
+            aria-pressed={picked}
+            onClick={() => onToggle(source.id)}
+            className={`flex h-10 max-w-[5.25rem] shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-white px-3 transition ${
+              picked
+                ? "ring-2 ring-[var(--yellow)]"
+                : showingAll
+                  ? ""
+                  : "opacity-45 grayscale"
+            }`}
+          >
+            <BankIcon id={source.id} />
+          </button>
+        );
+      })}
+    </div>
   );
 }

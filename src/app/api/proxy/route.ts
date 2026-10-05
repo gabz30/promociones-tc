@@ -23,37 +23,40 @@ const ALLOWED_HOSTS = new Set([
   "www.bsc.com.do",
 ]);
 
-const publicResolver = new Resolver();
-publicResolver.setServers(["1.1.1.1", "8.8.8.8"]);
-
-const publicDnsAgent = new Agent({
-  connect: {
-    // Bank sites sometimes ship incomplete cert chains; hosts are allowlisted.
-    rejectUnauthorized: false,
-    lookup(hostname, options, callback) {
-      const wantAll = Boolean(
-        options && typeof options === "object" && "all" in options && options.all,
-      );
-      publicResolver
-        .resolve4(hostname)
-        .then((addresses) => {
-          if (!addresses.length) {
-            callback(new Error(`No A records for ${hostname}`), wantAll ? [] : "", 4);
-            return;
-          }
-          if (wantAll) {
-            callback(
-              null,
-              addresses.map((address) => ({ address, family: 4 as const })),
-            );
-            return;
-          }
-          callback(null, addresses[0], 4);
-        })
-        .catch((error: Error) => callback(error, wantAll ? [] : "", 4));
+function createProxyAgent(server: string) {
+  const resolver = new Resolver();
+  resolver.setServers([server]);
+  return new Agent({
+    connect: {
+      // Bank sites sometimes ship incomplete cert chains; hosts are allowlisted.
+      rejectUnauthorized: false,
+      lookup(hostname, options, callback) {
+        const wantAll = Boolean(
+          options && typeof options === "object" && "all" in options && options.all,
+        );
+        resolver
+          .resolve4(hostname)
+          .then((addresses) => {
+            if (!addresses.length) {
+              callback(new Error(`No A records for ${hostname}`), wantAll ? [] : "", 4);
+              return;
+            }
+            if (wantAll) {
+              callback(
+                null,
+                addresses.map((address) => ({ address, family: 4 as const })),
+              );
+              return;
+            }
+            callback(null, addresses[0], 4);
+          })
+          .catch((error: Error) => callback(error, wantAll ? [] : "", 4));
+      },
     },
-  },
-});
+  });
+}
+
+const proxyAgents = ["1.1.1.1", "8.8.8.8"].map(createProxyAgent);
 
 function isAllowed(url: URL) {
   if (url.protocol !== "https:" && url.protocol !== "http:") return false;
@@ -106,22 +109,26 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const upstream = await undiciFetch(target.toString(), {
-      dispatcher: publicDnsAgent,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "*/*",
-        Referer: `${target.origin}/`,
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(45000),
-    });
+    let upstream: Awaited<ReturnType<typeof undiciFetch>> | null = null;
+    for (const dispatcher of proxyAgents) {
+      upstream = await undiciFetch(target.toString(), {
+        dispatcher,
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "*/*",
+          Referer: `${target.origin}/`,
+        },
+        redirect: "follow",
+        signal: AbortSignal.timeout(45000),
+      });
+      if (upstream.ok || upstream.status !== 403) break;
+    }
 
-    if (!upstream.ok) {
+    if (!upstream || !upstream.ok) {
       return NextResponse.json(
-        { error: `Upstream ${upstream.status}` },
-        { status: upstream.status },
+        { error: `Upstream ${upstream?.status ?? 502}` },
+        { status: upstream?.status ?? 502 },
       );
     }
 
