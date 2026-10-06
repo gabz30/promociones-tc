@@ -69,7 +69,7 @@ const getCachedPromotions = unstable_cache(
       ].filter(Boolean) as string[],
     };
   },
-  ["promotions-raw-v5"],
+  ["promotions-raw-v6"],
   {
     revalidate: 3600,
     tags: ["promotions"],

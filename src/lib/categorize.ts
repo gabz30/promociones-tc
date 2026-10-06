@@ -10,7 +10,12 @@ export function getPromoStatus(
   promo: Promotion,
   today = todayInDominicanRepublic(),
 ): PromoStatus {
-  if (compareIsoDates(promo.endDate, today) < 0) return "past";
+  if (compareIsoDates(promo.endDate, today) < 0) {
+    // BHD's feed is the live page, not an archive. Cards stay in Hoy
+    // until the bank removes them, even after the printed end date.
+    if (promo.bankId === "bhd") return "today";
+    return "past";
+  }
   if (compareIsoDates(promo.startDate, today) > 0) return "upcoming";
   return "today";
 }
