@@ -53,6 +53,16 @@ const nextConfig: NextConfig = {
         hostname: "www.bsc.com.do",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "popularenlinea.com",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "www.popularenlinea.com",
+        pathname: "/**",
+      },
     ],
   },
 };

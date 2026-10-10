@@ -10,6 +10,7 @@ import {
 } from "./cibao";
 import { LAFISE_PROMOS_URL, scrapeLafisePromotions } from "./lafise";
 import { QIK_PROMOS_URL, scrapeQikPromotions } from "./qik";
+import { POPULAR_PROMOS_URL, scrapePopularPromotions } from "./popular";
 import {
   SCOTIA_PROMOS_URL,
   scrapeScotiaPromotions,
@@ -23,6 +24,7 @@ const SOURCES: PromoSource[] = [
   { id: "scotia", name: "Scotiabank", url: scotiaPromosPageUrl() },
   { id: "cibao", name: "Cibao", url: cibaoPromosPageUrl() },
   { id: "bsc", name: "Santa Cruz", url: BSC_PROMOS_URL },
+  { id: "popular", name: "Popular", url: POPULAR_PROMOS_URL },
 ];
 
 async function scrapeBank(
@@ -41,13 +43,14 @@ async function scrapeBank(
 /** Cache raw promos only — never cache "today/upcoming/past" buckets. */
 const getCachedPromotions = unstable_cache(
   async (): Promise<{ promotions: Promotion[]; errors: string[] }> => {
-    const [qik, lafise, bhd, scotia, cibao, bsc] = await Promise.all([
+    const [qik, lafise, bhd, scotia, cibao, bsc, popular] = await Promise.all([
       scrapeBank("Qik", scrapeQikPromotions),
       scrapeBank("LAFISE", scrapeLafisePromotions),
       scrapeBank("BHD", scrapeBhdPromotions),
       scrapeBank("Scotiabank", scrapeScotiaPromotions),
       scrapeBank("Cibao", scrapeCibaoPromotions),
       scrapeBank("Santa Cruz", scrapeBscPromotions),
+      scrapeBank("Popular", scrapePopularPromotions),
     ]);
 
     return {
@@ -58,6 +61,7 @@ const getCachedPromotions = unstable_cache(
         ...scotia.promotions,
         ...cibao.promotions,
         ...bsc.promotions,
+        ...popular.promotions,
       ],
       errors: [
         qik.error,
@@ -66,10 +70,11 @@ const getCachedPromotions = unstable_cache(
         scotia.error,
         cibao.error,
         bsc.error,
+        popular.error,
       ].filter(Boolean) as string[],
     };
   },
-  ["promotions-raw-v6"],
+  ["promotions-raw-v12"],
   {
     revalidate: 3600,
     tags: ["promotions"],
@@ -108,4 +113,6 @@ export {
   cibaoPromosPageUrl,
   scrapeBscPromotions,
   BSC_PROMOS_URL,
+  scrapePopularPromotions,
+  POPULAR_PROMOS_URL,
 };

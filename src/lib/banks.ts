@@ -65,6 +65,15 @@ export const BANK_THEMES: Record<BankId, BankTheme> = {
     slogan: "Más cerca de ti",
     logo: "/banks/bsc.svg",
   },
+  popular: {
+    id: "popular",
+    name: "Popular",
+    color: "#003DA5",
+    soft: "#e6eef8",
+    onColor: "#ffffff",
+    slogan: "El banco de los dominicanos",
+    logo: `/api/proxy?url=${encodeURIComponent("https://popularenlinea.com/_catalogs/masterpage/popularenlinea/shared/images/BPD-logo.png")}`,
+  },
 };
 
 export function getBankTheme(bankId: BankId): BankTheme {

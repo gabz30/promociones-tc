@@ -1,6 +1,6 @@
 export type PromoStatus = "today" | "upcoming" | "past";
 
-export type BankId = "qik" | "lafise" | "bhd" | "scotia" | "cibao" | "bsc";
+export type BankId = "qik" | "lafise" | "bhd" | "scotia" | "cibao" | "bsc" | "popular";
 
 export interface Promotion {
   id: string;
@@ -17,6 +17,8 @@ export interface Promotion {
   conditionsUrl: string | null;
   conditionsLabel: string | null;
   tag: string | null;
+  /** HTML del detalle cuando el banco lo abre en un modal y no en una página embebible. */
+  detailHtml?: string | null;
 }
 
 export interface PromoSource {

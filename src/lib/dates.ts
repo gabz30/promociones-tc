@@ -109,6 +109,40 @@ export function parseSpanishDateRange(
     }
   }
 
+  // del 15 de junio de 2026 al 15 de septiembre de 2027
+  // desde 23 de septiembre de 2026 hasta el 30 de septiembre de 2027
+  const bothYears = text.match(
+    /(?:del|desde(?:\s+el)?)\s+(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})\s+(?:al|hasta(?:\s+el)?)\s+(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})/,
+  );
+  if (bothYears) {
+    const startMonth = MONTHS[bothYears[2]];
+    const endMonth = MONTHS[bothYears[5]];
+    if (startMonth !== undefined && endMonth !== undefined) {
+      return {
+        startDate: toIso(Number(bothYears[3]), startMonth, Number(bothYears[1])),
+        endDate: toIso(Number(bothYears[6]), endMonth, Number(bothYears[4])),
+      };
+    }
+  }
+
+  // desde el 22 de septiembre al 22 de noviembre de 2026
+  // del 24 de agosto hasta el 31 de diciembre de 2026
+  const desdeHastaCross = text.match(
+    /(?:del|desde(?:\s+el)?)\s+(\d{1,2})\s+de\s+([a-z]+)\s+(?:al|hasta(?:\s+el)?)\s+(\d{1,2})\s+de\s+([a-z]+)\s+(?:del?\s+)?(\d{4})/,
+  );
+  if (desdeHastaCross) {
+    const startMonth = MONTHS[desdeHastaCross[2]];
+    const endMonth = MONTHS[desdeHastaCross[4]];
+    if (startMonth !== undefined && endMonth !== undefined) {
+      const year = Number(desdeHastaCross[5]);
+      const startYear = startMonth > endMonth ? year - 1 : year;
+      return {
+        startDate: toIso(startYear, startMonth, Number(desdeHastaCross[1])),
+        endDate: toIso(year, endMonth, Number(desdeHastaCross[3])),
+      };
+    }
+  }
+
   // desde el 16 al 24 de julio de 2026
   const desde = text.match(
     /desde el\s+(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([a-z]+)\s+(?:de\s+)?(\d{4})/,
@@ -169,6 +203,20 @@ export function parseSpanishDateRange(
     };
   }
 
+  // Open-ended until: hasta el 31 de julio de 2026 / hasta 31 de diciembre de 2026
+  const until = text.match(
+    /hasta(?:\s+el)?\s+(\d{1,2})\s+de\s+([a-z]+)(?:\s+(?:del?\s+)?(\d{4}))?/,
+  );
+  if (until && MONTHS[until[2]] !== undefined) {
+    const month = MONTHS[until[2]];
+    const year = until[3]
+      ? Number(until[3])
+      : (fallbackYear ?? new Date().getFullYear());
+    const endDate = toIso(year, month, Number(until[1]));
+    const startDate = options?.openStartDate ?? toIso(year, month, 1);
+    return { startDate, endDate };
+  }
+
   // Single day: el 17 de agosto 2026 / solo el 17 de agosto de 2026
   const singleDay = text.match(
     /(?:solo\s+)?(?:el\s+)?(\d{1,2})\s+de\s+([a-z]+)\s+(?:del?\s+)?(\d{4})/,
@@ -182,23 +230,6 @@ export function parseSpanishDateRange(
       const day = Number(singleDay[1]);
       const iso = toIso(year, month, day);
       return { startDate: iso, endDate: iso };
-    }
-  }
-
-  // Open-ended until: hasta el 31 de julio de 2026 / hasta el 31 de julio
-  const until = text.match(
-    /hasta el\s+(\d{1,2})\s+de\s+([a-z]+)(?:\s+(?:del?\s+)?(\d{4}))?/,
-  );
-  if (until) {
-    const month = MONTHS[until[2]];
-    if (month !== undefined) {
-      const year = until[3]
-        ? Number(until[3])
-        : (fallbackYear ?? new Date().getFullYear());
-      const endDate = toIso(year, month, Number(until[1]));
-      const startDate =
-        options?.openStartDate ?? toIso(year, month, 1);
-      return { startDate, endDate };
     }
   }
 

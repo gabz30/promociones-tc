@@ -21,6 +21,9 @@ const ALLOWED_HOSTS = new Set([
   "www.cibao.com.do",
   "bsc.com.do",
   "www.bsc.com.do",
+  "popularenlinea.com",
+  "www.popularenlinea.com",
+  "solicitudes.popularenlinea.com.do",
 ]);
 
 function createProxyAgent(server: string) {
@@ -83,6 +86,21 @@ function stripFrameHeaders(headers: Headers) {
   return out;
 }
 
+function sniffContentType(pathname: string, upstreamType: string): string {
+  const generic =
+    !upstreamType ||
+    upstreamType.startsWith("application/octet-stream") ||
+    upstreamType.startsWith("text/plain");
+  if (!generic) return upstreamType;
+  const path = pathname.toLowerCase();
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".gif")) return "image/gif";
+  if (path.endsWith(".svg")) return "image/svg+xml";
+  return upstreamType || "application/octet-stream";
+}
+
 function injectBaseHref(html: string, baseHref: string) {
   if (/<base\s/i.test(html)) return html;
   if (/<head[^>]*>/i.test(html)) {
@@ -132,7 +150,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+    const upstreamType = upstream.headers.get("content-type") || "";
+    const contentType = sniffContentType(target.pathname, upstreamType);
     const headers = stripFrameHeaders(new Headers());
     headers.set("Content-Type", contentType);
 
