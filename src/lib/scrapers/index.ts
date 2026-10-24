@@ -35,7 +35,7 @@ async function scrapeBank(
     return { promotions: await scraper() };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[${name}] scrape failed:`, message);
+    console.warn(`[${name}] scrape failed:`, message);
     return { promotions: [], error: `${name}: ${message}` };
   }
 }
@@ -43,14 +43,13 @@ async function scrapeBank(
 /** Cache raw promos only — never cache "today/upcoming/past" buckets. */
 const getCachedPromotions = unstable_cache(
   async (): Promise<{ promotions: Promotion[]; errors: string[] }> => {
-    const [qik, lafise, bhd, scotia, cibao, bsc, popular] = await Promise.all([
+    const [qik, lafise, bhd, scotia, cibao, bsc] = await Promise.all([
       scrapeBank("Qik", scrapeQikPromotions),
       scrapeBank("LAFISE", scrapeLafisePromotions),
       scrapeBank("BHD", scrapeBhdPromotions),
       scrapeBank("Scotiabank", scrapeScotiaPromotions),
       scrapeBank("Cibao", scrapeCibaoPromotions),
       scrapeBank("Santa Cruz", scrapeBscPromotions),
-      scrapeBank("Popular", scrapePopularPromotions),
     ]);
 
     return {
@@ -61,7 +60,6 @@ const getCachedPromotions = unstable_cache(
         ...scotia.promotions,
         ...cibao.promotions,
         ...bsc.promotions,
-        ...popular.promotions,
       ],
       errors: [
         qik.error,
@@ -70,11 +68,10 @@ const getCachedPromotions = unstable_cache(
         scotia.error,
         cibao.error,
         bsc.error,
-        popular.error,
       ].filter(Boolean) as string[],
     };
   },
-  ["promotions-raw-v12"],
+  ["promotions-raw-v14"],
   {
     revalidate: 3600,
     tags: ["promotions"],
@@ -84,7 +81,13 @@ const getCachedPromotions = unstable_cache(
 export async function getAllPromotions(): Promise<
   CategorizedPromotions & { errors: string[] }
 > {
-  const { promotions, errors } = await getCachedPromotions();
+  const [cached, popular] = await Promise.all([
+    getCachedPromotions(),
+    scrapeBank("Popular", scrapePopularPromotions),
+  ]);
+  const promotions = [...cached.promotions, ...popular.promotions];
+  const errors = [...cached.errors];
+  if (popular.error) errors.push(popular.error);
 
   // Always classify with the current Dominican Republic date.
   const categorized = categorizePromotions(promotions, {

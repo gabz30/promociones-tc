@@ -153,16 +153,21 @@ function assertReadableBody(text: string): string {
   return text;
 }
 
-function findChrome(): string | null {
-  const localAppData = process.env.LOCALAPPDATA;
+function findBrowser(): string | null {
+  const localAppData = process.env.LOCALAPPDATA ?? "";
+  const programFiles = process.env.ProgramFiles ?? "C:\\Program Files";
+  const programFilesX86 = process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
+  const programW6432 = process.env.ProgramW6432 ?? programFiles;
   const candidates = [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    localAppData
-      ? join(localAppData, "Google", "Chrome", "Application", "chrome.exe")
-      : "",
-  ].filter(Boolean);
-  return candidates.find((path) => existsSync(path)) ?? null;
+    join(programFiles, "Google", "Chrome", "Application", "chrome.exe"),
+    join(programW6432, "Google", "Chrome", "Application", "chrome.exe"),
+    join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe"),
+    join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
+    join(programFiles, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join(programFilesX86, "Microsoft", "Edge", "Application", "msedge.exe"),
+    join(localAppData, "Microsoft", "Edge", "Application", "msedge.exe"),
+  ];
+  return candidates.find((path) => path && existsSync(path)) ?? null;
 }
 
 async function readChromeDebugPort(userDataDir: string): Promise<number> {
@@ -177,73 +182,108 @@ async function readChromeDebugPort(userDataDir: string): Promise<number> {
   throw new Error("Chrome no abrió el puerto de depuración");
 }
 
-async function cdpEvaluate(wsUrl: string, expression: string): Promise<string> {
-  const ws = new WebSocket(wsUrl);
-  await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Tiempo de espera al conectar con Chrome")),
-      10000,
-    );
-    ws.addEventListener("open", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-    ws.addEventListener("error", () => {
-      clearTimeout(timer);
-      reject(new Error("No se pudo conectar a Chrome"));
-    });
-  });
-
-  const messageId = 1;
-  const result = new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error("Chrome no respondió a tiempo"));
-    }, 45000);
-    ws.addEventListener("message", (event) => {
-      const raw = event.data;
-      const text =
-        typeof raw === "string"
-          ? raw
-          : raw instanceof ArrayBuffer
-            ? Buffer.from(raw).toString("utf8")
-            : ArrayBuffer.isView(raw)
-              ? Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString("utf8")
-              : String(raw);
-      const data = JSON.parse(text) as {
-        id?: number;
-        error?: { message?: string };
-        result?: {
-          exceptionDetails?: unknown;
-          result?: { value?: string };
-        };
-      };
-      if (data.id !== messageId) return;
-      clearTimeout(timer);
-      if (data.error) {
-        reject(new Error(data.error.message || "Error de Chrome"));
-        return;
-      }
-      if (data.result?.exceptionDetails) {
-        reject(new Error("Chrome no pudo leer la página"));
-        return;
-      }
-      resolve(String(data.result?.result?.value ?? ""));
-    });
-  });
-
-  ws.send(
-    JSON.stringify({
-      id: messageId,
-      method: "Runtime.evaluate",
-      params: { expression, awaitPromise: true, returnByValue: true },
-    }),
-  );
-
-  try {
-    return await result;
-  } finally {
-    ws.close();
+function cdpMessageText(data: unknown): string {
+  if (typeof data === "string") return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("utf8");
   }
+  return String(data);
+}
+
+class BrowserSession {
+  private nextId = 0;
+  private readonly pending = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  private constructor(private readonly ws: WebSocket) {}
+
+  static async open(wsUrl: string): Promise<BrowserSession> {
+    const ws = new WebSocket(wsUrl);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error("Tiempo de espera al conectar con el navegador")),
+        10000,
+      );
+      ws.addEventListener("open", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+      ws.addEventListener("error", () => {
+        clearTimeout(timer);
+        reject(new Error("No se pudo conectar al navegador"));
+      });
+    });
+
+    const session = new BrowserSession(ws);
+    ws.addEventListener("message", (event) => {
+      let data: { id?: number; error?: { message?: string }; result?: unknown };
+      try {
+        data = JSON.parse(cdpMessageText(event.data)) as typeof data;
+      } catch {
+        return;
+      }
+      if (data.id == null) return;
+      const pending = session.pending.get(data.id);
+      if (!pending) return;
+      clearTimeout(pending.timer);
+      session.pending.delete(data.id);
+      if (data.error) pending.reject(new Error(data.error.message || "Error del navegador"));
+      else pending.resolve(data.result);
+    });
+    return session;
+  }
+
+  send(method: string, params: object = {}, timeoutMs = 8000): Promise<unknown> {
+    const id = ++this.nextId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("El navegador no respondió a tiempo"));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      this.ws.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  close() {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("Navegador cerrado"));
+    }
+    this.pending.clear();
+    this.ws.close();
+  }
+}
+
+async function openBlankPage(port: number): Promise<string> {
+  const listed = await fetch(`http://127.0.0.1:${port}/json/list`);
+  const pages = (await listed.json()) as {
+    type?: string;
+    webSocketDebuggerUrl?: string;
+  }[];
+  const page = pages.find((item) => item.type === "page" && item.webSocketDebuggerUrl);
+  if (!page?.webSocketDebuggerUrl) {
+    throw new Error("El navegador no devolvió un depurador");
+  }
+  return page.webSocketDebuggerUrl;
+}
+
+let browserQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueBrowser<T>(task: () => Promise<T>): Promise<T> {
+  const run = browserQueue.then(task, task);
+  browserQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 /** Some bank sites only answer after a real browser clears the bot check. */
@@ -251,15 +291,22 @@ async function fetchWithChrome(
   url: string,
   options: FetchRemoteOptions,
 ): Promise<string> {
-  const chrome = findChrome();
-  if (!chrome) throw new Error("Chrome no está instalado");
+  return enqueueBrowser(() => fetchWithBrowserOnce(url, options));
+}
+
+async function fetchWithBrowserOnce(
+  url: string,
+  options: FetchRemoteOptions,
+): Promise<string> {
+  const browser = findBrowser();
+  if (!browser) throw new Error("No se encontró Chrome ni Edge");
 
   const pageUrl = new URL(url);
   const resolver = createResolver("8.8.8.8");
   const addresses = await resolver.resolve4(pageUrl.hostname);
   const userDataDir = mkdtempSync(join(tmpdir(), "promotc-chrome-"));
   const child = spawn(
-    chrome,
+    browser,
     [
       "--headless=new",
       "--disable-gpu",
@@ -275,45 +322,95 @@ async function fetchWithChrome(
     { stdio: "ignore", windowsHide: true },
   );
 
+  let session: BrowserSession | null = null;
   try {
     const port = await readChromeDebugPort(userDataDir);
-    const created = await fetch(
-      `http://127.0.0.1:${port}/json/new?${encodeURIComponent(`https://${pageUrl.hostname}/`)}`,
-      { method: "PUT" },
-    );
-    const target = (await created.json()) as { webSocketDebuggerUrl?: string };
-    if (!target.webSocketDebuggerUrl) {
-      throw new Error("Chrome no devolvió un depurador");
+    const wsUrl = await openBlankPage(port);
+    session = await BrowserSession.open(wsUrl);
+    await session.send("Page.enable");
+    await session.send("Runtime.enable");
+    await session.send("Network.enable");
+    await session.send("Network.setUserAgentOverride", {
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    });
+    await session.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+        window.chrome = window.chrome || { runtime: {} };`,
+    });
+    await session.send("Page.navigate", { url: `https://${pageUrl.hostname}/` });
+
+    const deadline = Date.now() + 8000;
+    let lastState = "pending";
+    while (Date.now() < deadline) {
+      try {
+        const probe = (await session.send(
+          "Runtime.evaluate",
+          {
+            expression: `(() => {
+              const host = location.hostname || "";
+              if (!host.endsWith(${JSON.stringify(pageUrl.hostname)})) return "pending";
+              const html = document.documentElement ? document.documentElement.outerHTML : "";
+              if (!html.includes("_Incapsula_Resource")) return "ready";
+              const frame = document.getElementById("main-iframe");
+              const frameText = frame && frame.contentDocument && frame.contentDocument.body
+                ? frame.contentDocument.body.innerText
+                : "";
+              if (frameText.includes("Request unsuccessful") || html.includes("Request unsuccessful")) {
+                return "blocked";
+              }
+              return "challenge";
+            })()`,
+            returnByValue: true,
+          },
+          4000,
+        )) as { result?: { value?: string } };
+        lastState = probe.result?.value ?? "pending";
+        if (lastState === "ready" || lastState === "blocked") break;
+      } catch {
+        lastState = "reloading";
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (lastState !== "ready") {
+      throw new Error("Popular bloqueó la lectura automática");
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
     const accept = options.headers?.Accept ?? "application/json, text/html, */*";
     const expression = `(async () => {
-      const target = ${JSON.stringify(url)};
-      const accept = ${JSON.stringify(accept)};
-      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-      const deadline = Date.now() + 25000;
-      while (
-        Date.now() < deadline &&
-        document.documentElement.outerHTML.includes("_Incapsula_Resource")
-      ) {
-        await sleep(1000);
-      }
-      const response = await fetch(target, {
-        headers: { Accept: accept },
+      const response = await fetch(${JSON.stringify(url)}, {
+        headers: { Accept: ${JSON.stringify(accept)} },
         credentials: "include",
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(12000),
       });
       return await response.text();
     })()`;
-    return assertReadableBody(await cdpEvaluate(target.webSocketDebuggerUrl, expression));
+    const evaluated = (await session.send(
+      "Runtime.evaluate",
+      { expression, awaitPromise: true, returnByValue: true },
+      20000,
+    )) as {
+      exceptionDetails?: unknown;
+      result?: { value?: string };
+    };
+    if (evaluated.exceptionDetails) {
+      const details = evaluated.exceptionDetails as {
+        text?: string;
+        exception?: { description?: string };
+      };
+      throw new Error(
+        details.exception?.description || details.text || "El navegador no pudo leer la página",
+      );
+    }
+    return assertReadableBody(String(evaluated.result?.value ?? ""));
   } finally {
+    session?.close();
     child.kill();
     await new Promise((resolve) => setTimeout(resolve, 300));
     try {
       rmSync(userDataDir, { recursive: true, force: true });
     } catch {
-      // Chrome may still be releasing the profile folder.
+      // The browser may still be releasing the profile folder.
     }
   }
 }

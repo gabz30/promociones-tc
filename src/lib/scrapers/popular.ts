@@ -184,6 +184,9 @@ async function fetchPopularPage(url: string): Promise<PopularPayload> {
   }
 }
 
+let failureUntil = 0;
+let failureMessage = "Popular bloqueó la lectura automática";
+
 function readCachedItems(): PopularItem[] | null {
   try {
     if (!existsSync(POPULAR_CACHE_FILE)) return null;
@@ -197,6 +200,12 @@ function readCachedItems(): PopularItem[] | null {
 export async function scrapePopularPromotions(
   now = new Date(),
 ): Promise<Promotion[]> {
+  if (Date.now() < failureUntil) {
+    const cached = readCachedItems();
+    if (cached) return parsePopularItems(cached);
+    throw new Error(failureMessage);
+  }
+
   try {
     const items: PopularItem[] = [];
     let next: string | undefined = itemsUrl(now);
@@ -216,6 +225,8 @@ export async function scrapePopularPromotions(
   } catch (error) {
     const cached = readCachedItems();
     if (cached) return parsePopularItems(cached);
+    failureUntil = Date.now() + 5 * 60 * 1000;
+    failureMessage = error instanceof Error ? error.message : String(error);
     throw error;
   }
 }
